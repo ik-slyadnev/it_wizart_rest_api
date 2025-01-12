@@ -36,6 +36,7 @@ class TestPostV1AccountLogin:
 
         response = login.post_v1_account_login(
             user_data['login'],
-            user_data['password']
+            user_data['password'],
+            remember_me=True
         )
         assert response.status_code == 200, "Не удалось авторизоваться"
