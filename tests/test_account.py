@@ -1,6 +1,7 @@
 import pytest
 import json
 from faker import Faker
+import time
 
 fake = Faker()
 
@@ -22,10 +23,19 @@ class TestAccount:
         return user_data
 
     @pytest.fixture
-    def activation_token(self, mailhog):
+    def activation_token(self, mailhog, registered_user):
         """Фикстура для получения токена активации"""
-        messages = mailhog.get_api_v2_messages(limit='1').json()
-        return json.loads(messages['items'][0]['Content']['Body'])['ConfirmationLinkUrl'].split('/')[-1]
+        email = registered_user['email']
+        messages = mailhog.get_api_v2_messages().json()
+
+        # Ищем письмо для нужного email
+        for message in messages['items']:
+            if email in message['Content']['Headers']['To']:
+                body = json.loads(message['Content']['Body'])
+                return body['ConfirmationLinkUrl'].split('/')[-1]
+
+        # Если письмо не найдено
+        assert False, f"Письмо для {email} не найдено"
 
     @pytest.fixture
     def activated_user(self, account, registered_user, activation_token):
@@ -60,7 +70,7 @@ class TestAccount:
         )
         assert response.status_code == 200
 
-    def test_put_v1_account_email(self, account, login, mailhog, activated_user):
+    def test_put_v1_account_email(self, account, login, mailhog, activated_user, activation_token):
         """Тест смены email"""
 
         # Смена email
@@ -70,26 +80,25 @@ class TestAccount:
             new_email,
             activated_user['password']
         )
-        assert response.status_code == 200
+        assert response.status_code == 200, "Не удалось сменить email пользователя"
 
         # Проверка, что вход невозможен
         response = login.post_v1_account_login(
             activated_user['login'],
             activated_user['password']
         )
-        assert response.status_code == 403
+        assert response.status_code == 403, "Вход в систему все еще возможен после смены email"
 
-        # Получение нового токена активации
-        messages = mailhog.get_api_v2_messages(limit='1').json()
-        token = json.loads(messages['items'][0]['Content']['Body'])['ConfirmationLinkUrl'].split('/')[-1]
+        # Получение токена активации
+        token = activation_token
 
         # Активация нового email
         response = account.put_v1_account_token(token)
-        assert response.status_code == 200
+        assert response.status_code == 200, "Не удалось активировать новый email"
 
         # Проверка входа после активации
         response = login.post_v1_account_login(
             activated_user['login'],
             activated_user['password']
         )
-        assert response.status_code == 200
+        assert response.status_code == 200, "Вход в систему невозможен после активации нового email"
