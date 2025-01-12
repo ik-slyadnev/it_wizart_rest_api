@@ -25,8 +25,6 @@ class AccountApi:
         response = requests.post(url, json=payload)
         return response
 
-
-
     def put_v1_account_token(self, token):
         """
         Активация аккаунта по токену.
